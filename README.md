@@ -5,7 +5,6 @@ Dynamically updates domain record when your dynamic IP is changed.
 Supported platforms:
 - linux/amd64
 - linux/arm32v7 (RaspberryPi)
-- linux/arm64v8 (RaspberryPi 64-bit only)
 
 Uses `https://myexternalip.com/` to obtain current IP address.
 
@@ -14,7 +13,6 @@ Uses `https://myexternalip.com/` to obtain current IP address.
 You can use existing docker images:
 - linux/amd64: aderesh/namesiloddns:latest
 - linux/arm32: aderesh/namesiloddns:latest-armv7
-- linux/arm64: aderesh/namesiloddns:latest-armv8
 
 ### Prerequisites
 #### Obtain NameSilo API key
