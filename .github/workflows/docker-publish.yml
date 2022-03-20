@@ -1,4 +1,4 @@
-name: Publish docker image (multi-platform)
+name: Publish docker images
 on:
   push:
     branches: [ main ]
