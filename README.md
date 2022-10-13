@@ -14,6 +14,14 @@ You can use existing docker images:
 - linux/amd64: aderesh/namesiloddns:latest
 - linux/arm32: aderesh/namesiloddns:latest-armv7
 
+### Changelog
+## 12.10.2022
+- add NAMESILO_HOST_REGEX to update multiple host records. It could update example.com as well as blog.example.com, www.example.com etc
+- setting NAMESILO_DELAY to "00:00:00" would force the app to exit after one update. This is useful to schedule this as a cron job
+- added more logs
+## Initial
+
+
 ### Prerequisites
 #### Obtain NameSilo API key
 API key is needed to update DNS records using NameSilo API. The key should be passed as a `NAMESILO_APIKEY` environment variable.
