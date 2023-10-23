@@ -5,6 +5,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Threading;
 using System.Xml;
 using System.Net;
@@ -13,13 +14,33 @@ namespace namesilo
 {
     class Program
     {
-        private static string IPResolver = "https://myexternalip.com/raw";
+        private static string IPv4Resolver = "https://api.ipify.org";
+        private static string IPv6Resolver = "https://api64.ipify.org";
 
-        static string GetMyApi()
+        static IPAddress GetMyIP(string resolverURL, AddressFamily expectedAddressFamily)
         {
             var client = new HttpClient();
-            var response = client.GetAsync(IPResolver).Result;
-            return response.Content.ReadAsStringAsync().Result;
+            var response = client.GetAsync(resolverURL).Result;
+
+            IPAddress ip;
+            try
+            {
+                var ipString = response.Content.ReadAsStringAsync().Result;
+                ip = IPAddress.Parse(ipString);
+                Console.WriteLine($"External IP({resolverURL}): {ipString}");
+            }
+            catch
+            {
+                return null;
+            }
+
+            if (ip.AddressFamily != expectedAddressFamily)
+            {
+                Console.WriteLine($"Resolver '{resolverURL}' returned invalid address family for {ip}. Expected {expectedAddressFamily}. Actual {ip.AddressFamily}");
+                return null;
+            }
+
+            return ip;
         }
 
         public class Record
@@ -124,6 +145,8 @@ namespace namesilo
             const string hostRegexVariableName = "NAMESILO_HOST_REGEX";
             const string apiKeyVariableName = "NAMESILO_APIKEY";
             const string delayKeyVariableName = "NAMESILO_DELAY";
+            const string ipv4ResolverVariableName = "NAMESILO_IPV4_RESOLVER";
+            const string ipv6ResolverVariableName = "NAMESILO_IPV6_RESOLVER";
 
             // DEBUGGING
             /*
@@ -142,6 +165,8 @@ namespace namesilo
 
             var delayString = Environment.GetEnvironmentVariable(delayKeyVariableName, EnvironmentVariableTarget.Process);
             var delay = TimeSpan.FromMinutes(5);
+            var ipv4Resolver = Environment.GetEnvironmentVariable(ipv4ResolverVariableName) ?? IPv4Resolver;
+            var ipv6Resolver = Environment.GetEnvironmentVariable(ipv6ResolverVariableName) ?? IPv6Resolver;
 
             if (!string.IsNullOrWhiteSpace(hostRegex) && (string.IsNullOrWhiteSpace(domain))) {
                 throw new Exception($"{hostRegexVariableName} cannot be set with either {domainVariableName} or {hostVariableName}.");
@@ -180,21 +205,15 @@ namespace namesilo
             {
                 try
                 {
-                    var expectedIp = GetMyApi();
+                    var ipv4 = (ipv4Resolver.ToLower() != "n/a") ? 
+                        GetMyIP(ipv4Resolver, AddressFamily.InterNetwork) : null;
+                    var ipv6 = (ipv6Resolver.ToLower() != "n/a") ? 
+                        GetMyIP(ipv6Resolver, AddressFamily.InterNetworkV6) : null;
 
-                    IPAddress ip = null;
-
-                    try
-                    {
-                        ip = IPAddress.Parse(expectedIp);
-                    }
-                    catch
-                    {
-                        Console.Error.WriteLine($"Invalid IP address returned from '{IPResolver}'");
+                    if (ipv4 == null && ipv6 == null) {
+                        Console.Error.WriteLine("Cannot get current IP address");
                         return 1;
                     }
-
-                    Console.WriteLine("IP: " + ip);
 
                     var records = GetCurrentRecords(domain, apiKey);
 
@@ -212,15 +231,18 @@ namespace namesilo
                             return regex.IsMatch(record.Host) ? null : $"Doesn't match regex '{hostRegex}'";
                         };
 
-                    Func<Record, string> recordChecker = ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ?
+                    Func<Record, string> recordChecker =
                         (record) =>
                         {
-                            return record.Type == "A" ? null : "Only A record will be updated since current IP is V4";
-                        }
-                    :
-                        (record) =>
-                        {
-                            return record.Type == "AAAA" ? null : "Only AAAA record will be updated since current IP is V6";
+                            switch(record.Type)
+                            {
+                                case "A":
+                                        return ipv4 != null ? null : "Cannot update A record because external IPv4 was not resolved";
+                                case "AAAA":
+                                        return ipv6 != null ? null : "Cannot update AAAA record because external IPv6 was not resolved";
+                                default:
+                                    return "Only A and AAAA records can be updated";
+                            }
                         };
 
                     List<Func<Record, string>> checkers = new List<Func<Record, string>>() {
@@ -242,29 +264,36 @@ namespace namesilo
                     }
                     Console.WriteLine(" ");
 
-                    var filtered = enrichedRecords.Where(item => !item.ReasonsToSkip.Any()).Select(item => item.Record);
+                    var filtered = enrichedRecords.Where(item => !item.ReasonsToSkip.Any())
+                        .Select(item => item.Record)
+                        .ToList();
 
+                    Console.WriteLine($"Updating {filtered.Count} records");
                     foreach (var record in filtered) {
-                        Console.Write(record.Host + '\t');
-                        Console.Write("Current IP: " + record.IP + "\t");
+                        var expectedIp = record.Type == "A" ? ipv4.ToString() : ipv6.ToString();
 
-                        if (expectedIp == record.IP)
+                        var shouldUpdate = expectedIp != record.IP;
+                        var status =  !shouldUpdate ? "( )" : "(x)";
+                        Console.WriteLine($"{status} {record}");
+
+                        if (shouldUpdate)
                         {
-                            Console.WriteLine("IPs match, skipping");
-                        }
-                        else
-                        {
-                            Console.WriteLine("IPs mismatch, updating");
-                            if (!dryRun) {
+                            Console.WriteLine($"     - IPs mismatch, updating");
+                            if (!dryRun)
+                            {
                                 if (SetCurrentIP(record, expectedIp, apiKey))
                                 {
-                                    Console.WriteLine("Updated successfully");
+                                    Console.WriteLine($"         ... Updated successfully");
                                 }
                                 else
                                 {
-                                    Console.WriteLine("Failed to update");
+                                    Console.WriteLine($"         ... Failed to update");
                                 }
                             }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"     - IPs match, skipping");
                         }
                     }
 

@@ -15,6 +15,12 @@ You can use existing docker images:
 - linux/arm32: aderesh/namesiloddns:latest-armv7
 
 ### Changelog
+## 1.0.0 - 23.10.2023
+- Use 'ipify.org' as an external IP resolver for IPv4 and IPv6
+- Updates A if IPv4 is resolved
+- Updates AAAA if IPv6 is resolved
+- 
+
 ## 0.1.0 - 22.10.2023
 - Updated README.MD with NAMESILO_HOST_REGEX info to avoid confusion because of NAMESILO_DOMAIN
 - If current IP address is IPv4, only A records are updated. If it's IPv6, only AAAA records are updated. 
@@ -56,6 +62,8 @@ Environment variables:
 * NAMESILO_HOST_REGEX - (REQUIRED) Full host name.  If your record is 'blog.exmaple.org', your host name is 'blog.exmaple.org'.
 * NAMESILO_APIKEY - (REQUIRED) NameSilo API key. 
 * NAMESILO_DELAY - (OPTIONAL) Requests delay. By default, polls server every 5 minutes.
+* NAMESILO_IPV4_RESOLVER - (OPTIONAL) Should return external IPv4 as a text to update A records. Default: https://api.ipify.org. To skip, set to "N/A"
+* NAMESILO_IPV6_RESOLVER - (OPTIONAL) Should return external IPv6 as a text to update AAAA records. Default: https://api64.ipify.org. To skip, set to "N/A"
 
 ### To launch using docker
 
