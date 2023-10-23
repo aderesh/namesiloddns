@@ -15,6 +15,9 @@ You can use existing docker images:
 - linux/arm32: aderesh/namesiloddns:latest-armv7
 
 ### Changelog
+## 0.0.2 - 23.10.2023
+- add version and include it in docker tag
+
 ## 12.10.2022
 - add NAMESILO_HOST_REGEX to update multiple host records. It could update example.com as well as blog.example.com, www.example.com etc
 - setting NAMESILO_DELAY to "00:00:00" would force the app to exit after one update. This is useful to schedule this as a cron job
