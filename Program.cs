@@ -7,15 +7,18 @@ using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Xml;
+using System.Net;
 
 namespace namesilo
 {
     class Program
     {
+        private static string IPResolver = "https://myexternalip.com/raw";
+
         static string GetMyApi()
         {
             var client = new HttpClient();
-            var response = client.GetAsync("https://myexternalip.com/raw").Result;
+            var response = client.GetAsync(IPResolver).Result;
             return response.Content.ReadAsStringAsync().Result;
         }
 
@@ -26,6 +29,12 @@ namespace namesilo
             public string Host { get; set; }
             public string Domain { get; set; }
             public string TTL { get; set; }
+            public string Type { get; set; }
+
+            public override string ToString()
+            {
+                return $"{Host}({Type})={IP}, TTL: {TTL}, ID: {Id}";
+            }
         }
 
         static List<Record> GetCurrentRecords(string domain, string apiKey)
@@ -58,7 +67,8 @@ namespace namesilo
                 var id = record.ParentNode.SelectSingleNode("record_id/text()").Value;
                 var host = record.ParentNode.SelectSingleNode("host/text()").Value;
                 var ttl = record.ParentNode.SelectSingleNode("ttl/text()").Value;
-                result.Add(new Record { Id = id, IP = currentIP, Host = host, Domain = domain, TTL = ttl });
+                var type = record.ParentNode.SelectSingleNode("type/text()").Value;
+                result.Add(new Record { Id = id, IP = currentIP, Host = host, Domain = domain, TTL = ttl, Type = type });
             }
 
             return result;
@@ -171,35 +181,70 @@ namespace namesilo
                 try
                 {
                     var expectedIp = GetMyApi();
-                    Console.WriteLine("IP: " + expectedIp);
+
+                    IPAddress ip = null;
+
+                    try
+                    {
+                        ip = IPAddress.Parse(expectedIp);
+                    }
+                    catch
+                    {
+                        Console.Error.WriteLine($"Invalid IP address returned from '{IPResolver}'");
+                        return 1;
+                    }
+
+                    Console.WriteLine("IP: " + ip);
 
                     var records = GetCurrentRecords(domain, apiKey);
 
-                    Console.WriteLine($"Records({records.Count}):");
-                    foreach(var record in records) {
-                        Console.WriteLine($"- [{record.Id}] {record.Host}={record.IP}");
-                    }
-                    Console.WriteLine(" ");
+                    Func<Record, string> hostChecker = string.IsNullOrWhiteSpace(hostRegex) ?
+                        (record) =>
+                        {
+                            var searchHost = (string.IsNullOrWhiteSpace(host) ? domain : $"{host}.{domain}");
 
-                    if (!string.IsNullOrWhiteSpace(hostRegex)) {
-                        var regex = new Regex(hostRegex);
-                        records = records.Where(record => regex.IsMatch(record.Host)).ToList();
-                    }
-                    else
+                            return record.Host == searchHost ? null : $"Doesn't match '{searchHost}'. Host: '{host}', Domain: '{domain}'";
+                        }
+                    :
+                        (record) =>
+                        {
+                            var regex = new Regex(hostRegex);
+                            return regex.IsMatch(record.Host) ? null : $"Doesn't match regex '{hostRegex}'";
+                        };
+
+                    Func<Record, string> recordChecker = ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ?
+                        (record) =>
+                        {
+                            return record.Type == "A" ? null : "Only A record will be updated since current IP is V4";
+                        }
+                    :
+                        (record) =>
+                        {
+                            return record.Type == "AAAA" ? null : "Only AAAA record will be updated since current IP is V6";
+                        };
+
+                    List<Func<Record, string>> checkers = new List<Func<Record, string>>() {
+                        recordChecker,
+                        hostChecker
+                    };
+
+                    var enrichedRecords = records.Select(record => new { Record = record, ReasonsToSkip = checkers.Select(ch => ch(record)).Where(r => r != null) }).ToList();
+
+                    Console.WriteLine($"Records({enrichedRecords.Count}):");
+                    foreach (var item in enrichedRecords)
                     {
-                        // host OR domain
-                        var searchHost = (string.IsNullOrWhiteSpace(host) ? domain : $"{host}.{domain}");
-                        Console.WriteLine("Looking for " + searchHost);
-                        records = new List<Record>(records.Where(record => record.Host == searchHost));
-                    }
-
-                    Console.WriteLine($"Matching Records({records.Count}):");
-                    foreach(var record in records) {
-                        Console.WriteLine($"- [{record.Id}] {record.Host}={record.IP}");
+                        var status = item.ReasonsToSkip.Any() ? "( )" : "(x)";
+                        Console.WriteLine($"{status} {item.Record}");
+                        foreach (var reason in item.ReasonsToSkip)
+                        {
+                            Console.WriteLine($"     - {reason}");
+                        }
                     }
                     Console.WriteLine(" ");
 
-                    foreach(var record in records) {
+                    var filtered = enrichedRecords.Where(item => !item.ReasonsToSkip.Any()).Select(item => item.Record);
+
+                    foreach (var record in filtered) {
                         Console.Write(record.Host + '\t');
                         Console.Write("Current IP: " + record.IP + "\t");
 
