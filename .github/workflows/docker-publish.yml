@@ -1,40 +1,51 @@
 name: Publish docker images
 on:
   push:
-    branches: [ master ]
+    branches: [ master, feature/add-versions ]
   pull_request:
     branches: [ master ]
 
 jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      app_version: ${{ steps.get-version.outputs.app_version }}
+    steps:
+      - uses: actions/checkout@master
+      - id: get-version
+        name: Get App Version
+        run: | 
+            APP_VERSION=$( cat namesilo.csproj | grep -oPm1 "(?<=<Version>)[^<]+")
+            echo "app version $APP_VERSION"
+            echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+
   build-amd64:
     runs-on: ubuntu-latest
+    needs: get-version
     steps:
-      -
-        name: Login to DockerHub
+      - name: Login to DockerHub
         uses: docker/login-action@v1 
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build and push
+      - name: Build and push
         uses: docker/build-push-action@v2
         with:
-          push: true
-          tags: aderesh/namesiloddns
+          push: ${{ github.event_name == 'push' && github.ref == 'master' }}
+          tags: aderesh/namesiloddns:${{needs.get-version.outputs.app_version}}
           
   build-armv7:
     runs-on: ubuntu-latest
+    needs: get-version    
     steps:
-      -
-        name: Login to DockerHub
+      - name: Login to DockerHub
         uses: docker/login-action@v1 
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build and push
+      - name: Build and push
         uses: docker/build-push-action@v2
         with:
-          push: true
-          tags: aderesh/namesiloddns:latest-armv7
+          push: ${{ github.event_name == 'push' && github.ref == 'master' }}
+          tags: aderesh/namesiloddns:${{needs.get-version.outputs.app_version}}-armv7
           file: Dockerfile.armv7
