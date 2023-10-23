@@ -15,6 +15,12 @@ You can use existing docker images:
 - linux/arm32: aderesh/namesiloddns:latest-armv7
 
 ### Changelog
+## 0.1.0 - 22.10.2023
+- Updated README.MD with NAMESILO_HOST_REGEX info to avoid confusion because of NAMESILO_DOMAIN
+- If current IP address is IPv4, only A records are updated. If it's IPv6, only AAAA records are updated. 
+- add more logs around updated/skipped records
+- Updated to .NET 6 LTS
+
 ## 0.0.2 - 23.10.2023
 - add version and include it in docker tag
 
@@ -45,8 +51,9 @@ Install .net core sdk 5.0.
 You can either use this as a docker container or you can run it as a console app. 
 
 Environment variables:
-* NAMESILO_DOMAIN - (REQUIRED) Domain name. For instance, 'example.org'
-* NAMESILO_HOST - (OPTIONAL) Host name. Default is ''. If your record is 'blog.exmaple.org', your host name is 'blog'. 
+* NAMESILO_DOMAIN - (REQUIRED) Domain name. For instance, 'example.org'. Cannot be used with NAMESILO_HOST_REGEX
+* NAMESILO_HOST - (OPTIONAL) Short host name. Default is ''. If your record is 'blog.exmaple.org', your host name is 'blog'. Cannot be used with NAMESILO_HOST_REGEX
+* NAMESILO_HOST_REGEX - (REQUIRED) Full host name.  If your record is 'blog.exmaple.org', your host name is 'blog.exmaple.org'.
 * NAMESILO_APIKEY - (REQUIRED) NameSilo API key. 
 * NAMESILO_DELAY - (OPTIONAL) Requests delay. By default, polls server every 5 minutes.
 
